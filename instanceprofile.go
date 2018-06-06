@@ -66,7 +66,30 @@ func (instanceprofile *InstanceProfile) Create(sess *session.Session) error {
 // Delete ...
 func (instanceprofile *InstanceProfile) Delete(sess *session.Session) error {
 	client := iam.New(sess)
-	_, err := client.DeleteInstanceProfile(&iam.DeleteInstanceProfileInput{
+
+	out, err := client.GetInstanceProfile(&iam.GetInstanceProfileInput{
+		InstanceProfileName: aws.String(instanceprofile.Name),
+	})
+	if err != nil {
+		return err
+	}
+	instanceprofile.Created = out.InstanceProfile
+
+	for _, awsrole := range instanceprofile.Created.Roles {
+		role := &Role{Name: *awsrole.RoleName, Created: awsrole}
+		_, err := client.RemoveRoleFromInstanceProfile(&iam.RemoveRoleFromInstanceProfileInput{
+			InstanceProfileName: instanceprofile.Created.InstanceProfileName,
+			RoleName:            role.Created.RoleName,
+		})
+		if err != nil {
+			return err
+		}
+		if err := role.Delete(sess); err != nil {
+			return err
+		}
+	}
+
+	_, err = client.DeleteInstanceProfile(&iam.DeleteInstanceProfileInput{
 		InstanceProfileName: instanceprofile.Created.InstanceProfileName,
 	})
 	return err
@@ -82,3 +105,19 @@ func (instanceprofile *InstanceProfile) Delete(sess *session.Session) error {
 // 	})
 //  return err
 // }
+
+// FindInstanceProfile ...
+func FindInstanceProfile(sess *session.Session, name string) (*InstanceProfile, error) {
+	client := iam.New(sess)
+	out, err := client.GetInstanceProfile(&iam.GetInstanceProfileInput{
+		InstanceProfileName: aws.String(name),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &InstanceProfile{
+		Name:    *out.InstanceProfile.InstanceProfileName,
+		Role:    nil, // TODO: populate roles
+		Created: out.InstanceProfile,
+	}, nil
+}

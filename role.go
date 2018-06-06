@@ -94,3 +94,46 @@ func (role *Role) AttachPolicy(sess *session.Session, arns ...string) error {
 
 	return nil
 }
+
+// Delete ...
+func (role *Role) Delete(sess *session.Session, deletePolicy ...bool) error {
+
+	deletePolicy = append(deletePolicy, false)
+
+	client := iam.New(sess)
+
+	out, err := client.ListAttachedRolePolicies(&iam.ListAttachedRolePoliciesInput{
+		RoleName: aws.String(role.Name),
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, attached := range out.AttachedPolicies {
+
+		if deletePolicy[0] {
+			if _, err := client.DeletePolicy(&iam.DeletePolicyInput{
+				PolicyArn: attached.PolicyArn,
+			}); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if _, err := client.DetachRolePolicy(&iam.DetachRolePolicyInput{
+			RoleName:  aws.String(role.Name),
+			PolicyArn: attached.PolicyArn,
+		}); err != nil {
+			return err
+		}
+
+	}
+
+	if _, err := client.DeleteRole(&iam.DeleteRoleInput{
+		RoleName: aws.String(role.Name),
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
